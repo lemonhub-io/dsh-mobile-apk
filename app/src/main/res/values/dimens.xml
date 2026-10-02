@@ -15,7 +15,7 @@
   <dimen name="ds_radius_pill">999dp</dimen>
   <dimen name="ds_radius_icon">18dp</dimen>
   <dimen name="ds_progress_height">5dp</dimen>
-  <dimen name="ds_logo_size">36dp</dimen>
+  <dimen name="ds_logo_size">28dp</dimen>
   <dimen name="ds_logo_shell">52dp</dimen>
   <dimen name="ds_btn_height">52dp</dimen>
   <dimen name="ds_btn_secondary_height">48dp</dimen>
