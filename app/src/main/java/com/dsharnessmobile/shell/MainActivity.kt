@@ -21,7 +21,6 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -328,7 +327,25 @@ class MainActivity : ComponentActivity() {
     }
     uiChrome.applyImmersive(uiChrome.immersivePrefs())
     val root = FrameLayout(this)
-    webView = WebView(this).apply {
+    // provider 缺失或升级窗口期内 WebView 构造本身会抛（无 GMS 精简 ROM / WebView 被停用 /
+    // provider 热更新中——低端与老设备实测情形）。旧路径在 onCreate 直接炸：无诊断、无引导页，
+    // 系统层面表现为「点开即崩」。改为如实落 boot-diag + 一句话告知 + finish 干净退出；
+    // 早退后各 lateinit 面由 ::isInitialized 闸门挡住，onDestroy 不碰未建对象。
+    // （赋值保持 `webView = WebView(this)` 字面形态——ForegroundPageRecoveryWiringTest 线序钉。）
+    try {
+      webView = WebView(this)
+    } catch (t: Throwable) {
+      LogCollector.writeBootDiag(
+        this,
+        "webview-construct",
+        "webview_provider_available=${WebViewShim.providerAvailable()}" +
+          " error=${t.javaClass.simpleName}: ${t.message}",
+      )
+      Toast.makeText(this, R.string.ds_webview_provider_missing, Toast.LENGTH_LONG).show()
+      finish()
+      return
+    }
+    webView.apply {
       id = View.generateViewId()
       visibility = View.GONE
       // §2.3（0.14.1 块C）：未设背景色时默认白，白屏在视觉上与「正常空页」不可区分——渲染失败
@@ -781,22 +798,9 @@ class MainActivity : ComponentActivity() {
     // AGP 8 默认不生成 BuildConfig，用 debuggable 标志判断。
     val debuggable = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     if (debuggable) android.webkit.WebView.setWebContentsDebuggingEnabled(true)
-    webView.settings.apply {
-      javaScriptEnabled = true
-      domStorageEnabled = true
-      allowFileAccess = false
-      mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-      // 禁用 HTTP 缓存：杜绝 WebView 命中旧 index/旧 bundle 造成"卡 loading 且
-      // 无诊断层"（缓存页里没有页面看门狗；荣耀/MagicUI 实测类问题）。
-      cacheMode = WebSettings.LOAD_NO_CACHE
-      // 0.13.3：textZoom 持久化退役（D6 收益省略）——上游 ui-theme fontSize 原生管内容字号。
-      // prefers-color-scheme 跟随系统深色（某些厂商 WebView 默认不跟随；
-      // FORCE_DARK_AUTO 让 media query 反映系统深浅，dsh 的"跟随系统"主题依赖它）。
-      if (Build.VERSION.SDK_INT >= 29) {
-        @Suppress("DEPRECATION")
-        forceDark = WebSettings.FORCE_DARK_AUTO
-      }
-    }
+    // 版本敏感设置全部走 WebViewShim（单面真源）；引擎页吃共享 baseline 档。
+    // 0.13.3：textZoom 持久化退役（D6 收益省略）——上游 ui-theme fontSize 原生管内容字号。
+    WebViewShim.applyBaseline(webView.settings)
     webView.webViewClient = object : WebViewClient() {
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val url = request.url.toString()
@@ -1658,16 +1662,14 @@ class MainActivity : ComponentActivity() {
    * 主 WebView 也不读——**用户拿不到，维护方就要不到**。老设备白屏的真因是内核版本（`<94` 不支持
    * ES2022 类静态块），拿不到版本就无法判定，用户必须装 adb 才能给出。
    *
-   * 读法与 `BrowserHost.kt:876-878` 同源（`getCurrentWebViewPackage()` + 主版本号正则），
+   * 读法由 `WebViewShim` 单面承载（provider 包 + 主版本号正则的唯一实现）；
    * 落盘走既有 `LogCollector.writeBootDiag`（唯一写者纪律：壳侧自有文件，不写 engine.log）。
-   * @returns 形如 `"110.0.5481.154.1"`；API < 26 或读不到时返回空串（显式空，不抛）。
+   * @returns 形如 `"110.0.5481.154.1"`；读不到时返回空串（显式空，不抛）。
    */
-  internal fun currentWebViewVersionName(): String =
-    if (Build.VERSION.SDK_INT >= 26) WebView.getCurrentWebViewPackage()?.versionName ?: "" else ""
+  internal fun currentWebViewVersionName(): String = WebViewShim.providerVersionName()
 
   /** 主版本号（§2.4 的判据字段：`syntax_floor_ok` 的输入）；读不到记 0（显式未知，不当通过）。 */
-  internal fun currentWebViewMajor(): Int =
-    Regex("(\\d+)\\.").find(currentWebViewVersionName())?.groupValues?.get(1)?.toIntOrNull() ?: 0
+  internal fun currentWebViewMajor(): Int = WebViewShim.providerMajor()
 
   /**
    * §2.4：把内核版本落到启动诊断面。**判据**：`files/boot-diag.log` 出现
@@ -1683,7 +1685,8 @@ class MainActivity : ComponentActivity() {
       LogCollector.writeBootDiag(
         this,
         "webview-version",
-        "from=$source webview_package=${WebView.getCurrentWebViewPackage()?.packageName ?: ""}"
+        "from=$source webview_package=${WebViewShim.providerPackageName()}"
+          + " webview_provider_available=${WebViewShim.providerAvailable()}"
           + " webview_version=$version webview_major=$major"
           + " syntax_floor_ok=$floorOk"
       )

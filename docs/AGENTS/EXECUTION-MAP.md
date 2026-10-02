@@ -2024,6 +2024,7 @@ app/src/main/java/com/dsharnessmobile/shell/GuidePageRenderer.kt
 app/src/main/java/com/dsharnessmobile/shell/SafeMode.kt
 app/src/main/java/com/dsharnessmobile/shell/SafeConsole.kt
 app/src/main/java/com/dsharnessmobile/shell/WebUiChrome.kt
+app/src/main/java/com/dsharnessmobile/shell/WebViewShim.kt
 app/src/main/java/com/dsharnessmobile/shell/ConsoleActivity.kt
 app/src/main/java/com/dsharnessmobile/shell/ConsoleSession.kt
 app/src/main/java/com/dsharnessmobile/shell/BootReceiver.kt

@@ -6,7 +6,7 @@
 
 | 域 | 类 | 关键调用点 |
 |---|---|---|
-| WebView 全家桶（8） | WebView、WebViewClient、WebChromeClient、WebSettings、WebResourceRequest、JsResult、ValueCallback、JavascriptInterface | MainActivity.kt（配置 + shouldOverrideUrlLoading/onReceivedError/onPageFinished/onShowFileChooser/onJsAlert）、**BrowserHost.kt（第二 WebView：导航策略/标题/渲染进程回收）**、ConsoleActivity.kt、WebUiChrome.kt（主题/字体回推） |
+| WebView 全家桶（8） | WebView、WebViewClient、WebChromeClient、WebSettings、WebResourceRequest、JsResult、ValueCallback、JavascriptInterface | MainActivity.kt（配置 + shouldOverrideUrlLoading/onReceivedError/onPageFinished/onShowFileChooser/onJsAlert）、**BrowserHost.kt（第二 WebView：导航策略/标题/渲染进程回收）**、ConsoleActivity.kt、WebUiChrome.kt（主题/字体回推）、**WebViewShim.kt（版本敏感面唯一入口：provider 回读/特性门/settings 两档）** |
 | 显示与虚拟屏（10） | hardware.display.DisplayManager、hardware.display.VirtualDisplay、view.Display、view.Surface、view.SurfaceView、view.SurfaceHolder、media.ImageReader、util.DisplayMetrics、graphics.PixelFormat、os.HandlerThread | **VdisplayController.kt**（createVirtualDisplay/release/setSurface/displayId/state）、**VdisplayHost.kt**（SurfaceView/SurfaceHolder 生命周期）、**VirtualDisplayProbe.kt**、**ScreenScope.kt（display 别名）**、MainActivity（viewer 宿主接线） |
 | 通知（5） | NotificationChannel、NotificationManager、PendingIntent、（androidx）NotificationCompat、（androidx）RemoteInput | **NotifyCenter.kt**（五类渠道 + 六类 kind 分流 + 弹窗/静默形态 + 自检面）、**NotifyStore.kt**（.notify.ndjson 偏移消费）、**NotifyBridge.kt**（专用 $events 流投放）、**NotifyDecisionQueue.kt**（失败态可见通知）、MainActivity.showTestNotification、EngineService.kt（前台通知）、WatchdogV2.kt（旧信道回退） |
 | 存储 SAF / MediaStore（6） | DocumentsContract、MediaStore、ContentValues、Environment、MediaScannerConnection、provider.Settings | ConfigTransfer.kt（Directory/MediaPick 双控制器 + PickImageContract）、DownloadSaver.kt（MediaStore.Downloads + IS_PENDING + 200MB 上限）、EngineManager.kt（MediaScannerConnection.scanFile）、LogCollector.kt（落盘路径分代）、PathOpen.kt（FileProvider URI） |
@@ -49,7 +49,7 @@ MainActivity 33 / OverlayService 20 / **BrowserHost 18** / OverlayPanel 15 / Con
 | 渠道 importance 只能降不能升 | 全等级（API 26+ 语义） | NotifyCenter.Face 候选 ID 序列 + getNotificationChannel/getImportance/hasUserSetImportance 三态判定；弹窗类首次即 HIGH 建，静默类换新 ID（§6.1.2） |
 | PendingIntent.FLAG_MUTABLE | 常量 API 31+ | minSdk 26 上该常量可用（未知标志被平台忽略），语义仅在 31+ 生效；只对 RemoteInput 回复动作用 |
 | setSilent / setTimeoutAfter / setPublicVersion / setAuthenticationRequired | NotificationCompat 面（API 26+ 直用） | setSilent 是静默类第二道保险；setTimeoutAfter 只撤弹窗不发 rejected；setAuthenticationRequired 在 APPROVAL_REQUIRE_UNLOCK=true 时启用（B4 NT-18） |
-| forceDark / GradientDrawable.setColors(colors, offsets) | API 29 | 分支降级（MainActivity.kt:330、ConsoleActivity.kt:90、OverlayHalo.kt:41） |
+| forceDark / GradientDrawable.setColors(colors, offsets) | API 29 | forceDark 唯一分支点在 WebViewShim.kt（`applyFollowSystemDark`）：按 **provider 特性门**择优（ALGORITHMIC_DARKENING 先、FORCE_DARK 兜底），不再按 SDK_INT 硬切——API 26–28 装新内核也能跟随；setColors 分支降级在 OverlayHalo.kt |
 | 沉浸式 WindowInsetsController vs systemUiVisibility | API 30 | 双路分支（MainActivity.kt:243-268、WebUiChrome.kt:17-32） |
 | security.android.exec xattr 补章 | Android 15+ 强制 | 无条件 setfattr 尽力而为（SnapshotExtractor.kt 类注释；不 enforcing 的内核为 no-op） |
 | SYSTEM_ALERT_WINDOW | 全等级 | Settings.canDrawOverlays + 授权页引导 + onResume 补启（OverlayController.kt:33-65、MainActivity.kt:206） |

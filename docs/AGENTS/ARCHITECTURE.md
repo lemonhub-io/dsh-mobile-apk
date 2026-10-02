@@ -17,6 +17,7 @@
 | AndroidBridge.kt | `window.androidBridge` 全部 @JavascriptInterface（计数由 check-bridge-symmetry 守；含设置/chooser/ScreenScope/BrowserHost/虚拟屏/BackGate 接线） | MainActivity（唯一 addJavascriptInterface 点） |
 | BrowserHost.kt / BrowserHostNavigationPolicy.kt / BrowserOverlayPolicy.kt / BrowserHostProfile.kt | Session/tab 捕获目标与 model/UI focus 分离；每tab无桥WebView先验证nonDefault profile，再允许HTTP/loopback并保留受保护控制origin拒绝；stage/letterbox/TTL；不支持profile拒绝、不回Default | MainActivity、可信browserHostCommand、模型controlOp |
 | ScreenScope.kt | 0.14 新增：ScreenScope/ScreenTargets/ScreenScopePrefs——用户屏幕范围的 native 真源（损坏/未知回落 virtual-only） | AndroidBridge、DeviceControlService |
+| WebViewShim.kt | WebView 版本敏感面唯一入口：provider 回读（`getCurrentWebViewPackage`+major 解析单实现）、androidx.webkit 特性门、settings 两档（baseline=引擎页/控制台，+isolation=BrowserHost）；LocalDocs 静态文档面刻意不走 baseline | MainActivity、BrowserHost、ConsoleActivity、EngineManager |
 
 注入方向：MainActivity 字段初始化阶段 `by lazy`/直接构造各协作类并传 `this`（如 `engineFlow = EngineStartFlow(this)`）；ActivityResult 注册必须在 STARTED 前，故 dirPickerController/mediaPickerController 为字段直接构造。协作类只回调 MainActivity 的 internal 方法，不持有彼此。
 
