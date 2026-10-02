@@ -11,8 +11,7 @@
   <dimen name="ds_space_48">48dp</dimen>
   <dimen name="ds_radius_sm">8dp</dimen>
   <dimen name="ds_radius_md">16dp</dimen>
-  <dimen name="ds_radius_shell">28dp</dimen>
-  <dimen name="ds_radius_card">24dp</dimen>
+  <dimen name="ds_radius_card">18dp</dimen>
   <dimen name="ds_radius_pill">999dp</dimen>
   <dimen name="ds_radius_icon">18dp</dimen>
   <dimen name="ds_progress_height">5dp</dimen>

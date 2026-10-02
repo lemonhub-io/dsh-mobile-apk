@@ -370,9 +370,10 @@ internal class GuidePageRenderer(private val activity: MainActivity) {
 
     val dotColor = when (phase) {
       GuidePhase.Error, GuidePhase.Closed -> activity.getColor(R.color.ds_danger)
-      GuidePhase.Updating, GuidePhase.Extracting -> activity.getColor(R.color.ds_warn)
-      GuidePhase.Starting, GuidePhase.Recovering, GuidePhase.Undoing -> activity.getColor(R.color.ds_accent)
-      // Info = 中性事实陈述（本版没有这项能力、无需处理），既不是故障（红）也不是进行中（黄）。
+      // 黑白稿里「进行中」统一为墨色脉冲，色相只留给真正的故障信号。
+      GuidePhase.Starting, GuidePhase.Extracting, GuidePhase.Updating,
+      GuidePhase.Recovering, GuidePhase.Undoing -> activity.getColor(R.color.ds_accent)
+      // Info = 中性事实陈述（本版没有这项能力、无需处理），既不是故障（红）也不是进行中（墨）。
       GuidePhase.Idle, GuidePhase.Info -> activity.getColor(R.color.ds_text_tertiary)
     }
     chrome.statusDot.background = DsUi.oval(dotColor)
