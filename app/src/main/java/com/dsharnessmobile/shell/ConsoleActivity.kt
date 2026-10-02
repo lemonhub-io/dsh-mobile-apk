@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
-import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.core.view.ViewCompat
@@ -96,15 +95,9 @@ class ConsoleActivity : ComponentActivity() {
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
       )
     }
-    webView.settings.apply {
-      javaScriptEnabled = true
-      domStorageEnabled = true
-      allowFileAccess = false
-      if (android.os.Build.VERSION.SDK_INT >= 29) {
-        @Suppress("DEPRECATION")
-        forceDark = WebSettings.FORCE_DARK_AUTO
-      }
-    }
+    // 与引擎页同一份 baseline（版本敏感设置的真源在 WebViewShim）；
+    // console.html 走 file:///android_asset，allowFileAccess=false 不影响 assets。
+    WebViewShim.applyBaseline(webView.settings)
     // Re-push status after page load: bash may be ready in onStart while console.html's
     // JS bridge is defined later — early evaluateJavascript calls are silently dropped.
     webView.webViewClient = object : android.webkit.WebViewClient() {

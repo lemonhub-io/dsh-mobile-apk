@@ -1574,12 +1574,13 @@ class EngineManager(private val context: Context, private val pickToken: String?
     // 为什么也进诊断包（而不只进 boot-diag.log）：老设备白屏时页面跑不起来，用户必须能**自助**取到
     // 「我的 WebView 版本够不够」这一个结论，而不必先跑到页面上看。
     // 字段名与 MainActivity 在 boot-diag.log 里用的**逐字一致**，便于两处对账。
-    // 取值口径同源：WebView.getCurrentWebViewPackage()?.versionName + 首个点分段数字。
+    // 取值口径同源：统一走 WebViewShim（provider 回读唯一实现）。
     try {
-      val pkg = android.webkit.WebView.getCurrentWebViewPackage()
-      val ver = pkg?.versionName ?: ""
-      val major = Regex("(\\d+)\\.").find(ver)?.groupValues?.get(1)?.toIntOrNull() ?: -1
-      sb.append("webview_package: ").append(pkg?.packageName ?: "").append('\n')
+      val ver = WebViewShim.providerVersionName()
+      // 这里的「读不到」哨兵保留 -1（显式缺席）；与 MainActivity 判据侧的 0 口径不同是有意的：
+      // 判据侧 0 不冒充通过，诊断包侧 -1 强调「连版本名都没拿到」。
+      val major = if (ver.isEmpty()) -1 else WebViewShim.providerMajor()
+      sb.append("webview_package: ").append(WebViewShim.providerPackageName()).append('\n')
       sb.append("webview_version: ").append(ver).append('\n')
       sb.append("webview_major: ").append(major).append('\n')
       // 语法下限 94（Chromium 94 起才有类静态块 static{}；低于它入口 chunk 解析即整体不执行 = 纯白无字）。
