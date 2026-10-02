@@ -76,7 +76,7 @@ class WebViewShimTest {
 
   @Test
   fun versionGatedSettingsLiveOnlyInTheShim() {
-    for (token in listOf("forceDark", "safeBrowsingEnabled")) {
+    for (token in listOf("setForceDark", "setAlgorithmicDarkeningAllowed", "setOffscreenPreRaster", "safeBrowsingEnabled")) {
       val files = filesContaining(token)
       assertEquals(
         "版本敏感设置 $token 必须只出现在 WebViewShim.kt（重复即漂移源）",
@@ -107,10 +107,49 @@ class WebViewShimTest {
   fun shimKeepsBothDarkModeAndSafeBrowsing() {
     val shim = codeOnly(source("WebViewShim.kt"))
     assertTrue("深色跟随必须保留在 shim 内", shim.contains("FORCE_DARK_AUTO"))
-    assertTrue("深色跟随必须有 API 29 门", shim.contains("VERSION.SDK_INT >= 29"))
     assertTrue("safe browsing 必须在隔离档里", shim.contains("safeBrowsingEnabled = true"))
     assertTrue("baseline 必须保留 NO_CACHE 语义", shim.contains("LOAD_NO_CACHE"))
     assertTrue("baseline 必须保留混合内容拒绝", shim.contains("MIXED_CONTENT_NEVER_ALLOW"))
+  }
+
+  @Test
+  fun darkFollowIsProviderGatedNotSdkGated() {
+    val shim = codeOnly(source("WebViewShim.kt"))
+    // 低版本兼容的核心承诺：深色跟随按 **provider 能力** 判（WebSettingsCompat +
+    // WebViewFeature 门），不再按 SDK_INT 硬切——API 26–28 的新内核也能跟随。
+    assertFalse("shim 内不得再有 SDK_INT 版本硬门", shim.contains("VERSION.SDK_INT"))
+    assertTrue(shim.contains("WebSettingsCompat.setForceDark"))
+    assertTrue(shim.contains("WebSettingsCompat.setAlgorithmicDarkeningAllowed"))
+    val algo = shim.indexOf("WebViewFeature.ALGORITHMIC_DARKENING")
+    val force = shim.indexOf("WebViewFeature.FORCE_DARK")
+    assertTrue("ALGORITHMIC_DARKENING 必须先于 FORCE_DARK（新路径优先）", algo >= 0 && force > algo)
+    // 每一路都必须先过 supports() 门再调 setter（否则旧 provider 上 UnsupportedOperationException）。
+    assertTrue(shim.contains("supports(WebViewFeature.ALGORITHMIC_DARKENING)"))
+    assertTrue(shim.contains("supports(WebViewFeature.FORCE_DARK)"))
+  }
+
+  @Test
+  fun offscreenPrerasterIsFeatureGated() {
+    val shim = codeOnly(source("WebViewShim.kt"))
+    // OFF_SCREEN_PRERASTER 为旧内核/低端机的滚动流畅度档位；setter 在未支持 provider 上会抛，
+    // 必须先过 supports() 门。
+    val gate = shim.indexOf("supports(WebViewFeature.OFF_SCREEN_PRERASTER)")
+    val call = shim.indexOf("WebSettingsCompat.setOffscreenPreRaster")
+    assertTrue("离屏预光栅必须先判特性再调 setter", gate >= 0 && call > gate)
+    assertTrue("必须挂在 baseline 档", shim.indexOf("applyOffscreenPreraster(s)") < shim.indexOf("applyIsolation"))
+  }
+
+  @Test
+  fun providerAvailabilitySurfacesInDiagnostics() {
+    val shim = codeOnly(source("WebViewShim.kt"))
+    assertTrue("provider 在场性必须是显式谓词", shim.contains("fun providerAvailable()"))
+    val field = "webview_provider_available"
+    assertTrue("boot-diag 必须写 provider 在场性", codeOnly(source("MainActivity.kt")).contains(field))
+    assertTrue("诊断包必须写 provider 在场性（与 boot-diag 字段名逐字一致）", codeOnly(source("EngineManager.kt")).contains(field))
+    // 缺席路径要能走到：MainActivity 构造 WebView 不得裸抛（无 GMS/裁剪 ROM 上点开即崩）。
+    val activity = codeOnly(source("MainActivity.kt"))
+    assertTrue("构造失败必须落诊断", activity.contains("\"webview-construct\""))
+    assertTrue("构造失败必须有用户可见告知", activity.contains("ds_webview_provider_missing"))
   }
 
   @Test

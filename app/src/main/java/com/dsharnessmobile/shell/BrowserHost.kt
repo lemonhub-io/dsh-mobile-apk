@@ -830,7 +830,16 @@ internal class BrowserHost(
       tab.loadState = "error"
       return null
     }
-    val created = WebView(activity)
+    // provider 会话中更新/被移除时，WebView() 构造本身会抛——走既有错误通道如实报，
+    // 不让浏览器面板的一次打开把壳侧整个崩掉（与 MainActivity 构造守护同一类故障）。
+    val created = try {
+      WebView(activity)
+    } catch (_: Throwable) {
+      workspace.profileError = "webview-provider-unavailable"
+      lastError = workspace.profileError
+      tab.loadState = "error"
+      return null
+    }
     // FIRST operation on this WebView: assign and verify its session's nonDefault profile.
     // No settings, JS evaluation, bridge, load or root attachment may precede this boundary.
     try {
@@ -848,8 +857,11 @@ internal class BrowserHost(
       visibility = View.GONE
       setBackgroundColor(Color.TRANSPARENT)
       // 隔离 WebView 吃「baseline + isolation」两档：版本敏感设置的真源在 WebViewShim。
-      WebViewShim.applyBaseline(settings)
-      WebViewShim.applyIsolation(settings)
+      // （settings.apply{} 是既有线序钉：profile attach 必须先于任何 settings 配置。）
+      settings.apply {
+        WebViewShim.applyBaseline(this)
+        WebViewShim.applyIsolation(this)
+      }
       // 滚动观察（页面真实滚动位置，不注入任何脚本）：驱动可信面板的控件避让与横屏锁定。
       // 回调一律写**本 tab** 的状态（闭包捕获 tab），绝不写「当前活动页」——否则后台页的
       // 加载/滚动事件会把前台页的状态覆盖掉（多页签下的典型错乱）。

@@ -1581,6 +1581,8 @@ class EngineManager(private val context: Context, private val pickToken: String?
       // 判据侧 0 不冒充通过，诊断包侧 -1 强调「连版本名都没拿到」。
       val major = if (ver.isEmpty()) -1 else WebViewShim.providerMajor()
       sb.append("webview_package: ").append(WebViewShim.providerPackageName()).append('\n')
+      // provider 缺席（无 WebView ROM / 升级窗口）与「版本串解析失败」含义不同，单列一项。
+      sb.append("webview_provider_available: ").append(WebViewShim.providerAvailable()).append('\n')
       sb.append("webview_version: ").append(ver).append('\n')
       sb.append("webview_major: ").append(major).append('\n')
       // 语法下限 94（Chromium 94 起才有类静态块 static{}；低于它入口 chunk 解析即整体不执行 = 纯白无字）。

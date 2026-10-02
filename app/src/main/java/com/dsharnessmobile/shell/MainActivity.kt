@@ -327,7 +327,23 @@ class MainActivity : ComponentActivity() {
     }
     uiChrome.applyImmersive(uiChrome.immersivePrefs())
     val root = FrameLayout(this)
-    webView = WebView(this).apply {
+    // provider 缺失或升级窗口期内 WebView 构造本身会抛（无 GMS 精简 ROM / WebView 被停用 /
+    // provider 热更新中——低端与老设备实测情形）。旧路径在 onCreate 直接炸：无诊断、无引导页，
+    // 系统层面表现为「点开即崩」。改为如实落 boot-diag + 一句话告知 + finish 干净退出；
+    // 早退后各 lateinit 面由 ::isInitialized 闸门挡住，onDestroy 不碰未建对象。
+    webView = try {
+      WebView(this)
+    } catch (t: Throwable) {
+      LogCollector.writeBootDiag(
+        this,
+        "webview-construct",
+        "webview_provider_available=${WebViewShim.providerAvailable()}" +
+          " error=${t.javaClass.simpleName}: ${t.message}",
+      )
+      Toast.makeText(this, R.string.ds_webview_provider_missing, Toast.LENGTH_LONG).show()
+      finish()
+      return
+    }.apply {
       id = View.generateViewId()
       visibility = View.GONE
       // §2.3（0.14.1 块C）：未设背景色时默认白，白屏在视觉上与「正常空页」不可区分——渲染失败
@@ -1668,6 +1684,7 @@ class MainActivity : ComponentActivity() {
         this,
         "webview-version",
         "from=$source webview_package=${WebViewShim.providerPackageName()}"
+          + " webview_provider_available=${WebViewShim.providerAvailable()}"
           + " webview_version=$version webview_major=$major"
           + " syntax_floor_ok=$floorOk"
       )

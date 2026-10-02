@@ -49,7 +49,7 @@ MainActivity 33 / OverlayService 20 / **BrowserHost 18** / OverlayPanel 15 / Con
 | 渠道 importance 只能降不能升 | 全等级（API 26+ 语义） | NotifyCenter.Face 候选 ID 序列 + getNotificationChannel/getImportance/hasUserSetImportance 三态判定；弹窗类首次即 HIGH 建，静默类换新 ID（§6.1.2） |
 | PendingIntent.FLAG_MUTABLE | 常量 API 31+ | minSdk 26 上该常量可用（未知标志被平台忽略），语义仅在 31+ 生效；只对 RemoteInput 回复动作用 |
 | setSilent / setTimeoutAfter / setPublicVersion / setAuthenticationRequired | NotificationCompat 面（API 26+ 直用） | setSilent 是静默类第二道保险；setTimeoutAfter 只撤弹窗不发 rejected；setAuthenticationRequired 在 APPROVAL_REQUIRE_UNLOCK=true 时启用（B4 NT-18） |
-| forceDark / GradientDrawable.setColors(colors, offsets) | API 29 | forceDark 唯一分支点已收进 WebViewShim.kt（`applyFollowSystemDark`，三个调用点共享）；setColors 分支降级在 OverlayHalo.kt |
+| forceDark / GradientDrawable.setColors(colors, offsets) | API 29 | forceDark 唯一分支点在 WebViewShim.kt（`applyFollowSystemDark`）：按 **provider 特性门**择优（ALGORITHMIC_DARKENING 先、FORCE_DARK 兜底），不再按 SDK_INT 硬切——API 26–28 装新内核也能跟随；setColors 分支降级在 OverlayHalo.kt |
 | 沉浸式 WindowInsetsController vs systemUiVisibility | API 30 | 双路分支（MainActivity.kt:243-268、WebUiChrome.kt:17-32） |
 | security.android.exec xattr 补章 | Android 15+ 强制 | 无条件 setfattr 尽力而为（SnapshotExtractor.kt 类注释；不 enforcing 的内核为 no-op） |
 | SYSTEM_ALERT_WINDOW | 全等级 | Settings.canDrawOverlays + 授权页引导 + onResume 补启（OverlayController.kt:33-65、MainActivity.kt:206） |

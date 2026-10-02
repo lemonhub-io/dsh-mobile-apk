@@ -1,8 +1,8 @@
 package com.dsharnessmobile.shell
 
-import android.os.Build
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 
 /**
@@ -12,7 +12,8 @@ import androidx.webkit.WebViewFeature
  *  - 内核包回读（getCurrentWebViewPackage + 主版本号正则）在 MainActivity /
  *    BrowserHost / EngineManager 各有一份，且「读不到」的哨兵不一致（0 vs -1）；
  *  - `SDK_INT >= 29 → forceDark` 的深色跟随在 MainActivity / BrowserHost /
- *    ConsoleActivity 里重复三遍；
+ *    ConsoleActivity 里重复三遍，且按系统版本判会把「API 26–28 + 新内核」
+ *    这类本可跟随的设备错判成不支持（能力在 provider，不在系统）；
  *  - androidx.webkit 能力门只在 BrowserHost 有一份私有实现。
  * 任何一处改版本策略就要三处同改；漏一处 = 同一台设备上不同壳侧 WebView 行为不一致。
  * 本对象把这些点收成单面真源：provider 回读 / 特性门 / 两档 settings 配置。
@@ -41,6 +42,14 @@ internal object WebViewShim {
   } catch (_: Throwable) {
     ""
   }
+
+  /**
+   * WebView provider 是否在场。false 有两种真实情形：设备没有 WebView
+   * （无 Google 服务的精简 ROM / AOSP 裁剪机），或 provider 正在升级窗口期
+   * （此窗口内 `WebView()` 构造本身会抛）。区分于「版本串解析失败」——
+   * 那是 provider 在场但 versionName 异形；两者诊断含义不同。
+   */
+  fun providerAvailable(): Boolean = providerPackageName().isNotEmpty()
 
   /** 内核主版本号；读不到记 0（显式未知——判据侧 0 不冒充通过）。 */
   fun providerMajor(): Int = majorOf(providerVersionName())
@@ -88,6 +97,7 @@ internal object WebViewShim {
     s.cacheMode = WebSettings.LOAD_NO_CACHE
     s.mediaPlaybackRequiresUserGesture = true
     applyFollowSystemDark(s)
+    applyOffscreenPreraster(s)
   }
 
   /**
@@ -113,13 +123,40 @@ internal object WebViewShim {
 
   /**
    * prefers-color-scheme 跟随系统深色（某些厂商 WebView 默认不跟随；
-   * FORCE_DARK_AUTO 让 media query 反映系统深浅，「跟随系统」主题依赖它）。
-   * setter API 29 才有；更低版本无平台深色语义可跟随，留默认即可。
+   * 「跟随系统」主题依赖 media query 如实反映系统深浅）。
+   *
+   * 两层按 **provider 能力**择优，不按 SDK_INT 猜：
+   *  1. ALGORITHMIC_DARKENING（webkit 1.5+/API 33 推荐路径）：算法级深色，
+   *     语义反转更聪明且与 forceDark 互斥——supported 时只用这一路；
+   *  2. FORCE_DARK（旧路径）：WebSettingsCompat 把能力门放在 provider 上，
+   *     于是 **API 26–28 + 新内核** 也能跟随（旧实现 `SDK_INT>=29` 直接跳过）；
+   *  3. 两路都不支持：provider 过旧，留默认（不假装跟随）。
    */
   private fun applyFollowSystemDark(s: WebSettings) {
-    if (Build.VERSION.SDK_INT >= 29) {
-      @Suppress("DEPRECATION")
-      s.forceDark = WebSettings.FORCE_DARK_AUTO
+    // 包一层：provider 更新窗口期内「特性门过、setter 抛」的竞态如实放弃（留默认），
+    // 不把一个渲染偏好变成崩溃。
+    try {
+      when {
+        supports(WebViewFeature.ALGORITHMIC_DARKENING) ->
+          WebSettingsCompat.setAlgorithmicDarkeningAllowed(s, true)
+        supports(WebViewFeature.FORCE_DARK) ->
+          @Suppress("DEPRECATION")
+          WebSettingsCompat.setForceDark(s, WebSettingsCompat.FORCE_DARK_AUTO)
+      }
+    } catch (_: Throwable) {
+    }
+  }
+
+  /**
+   * 离屏预光栅：空闲时预渲染屏外 tile，对**旧内核/低端机**的滚动流畅度
+   * 是实测有效的一档（webkit 特性门，provider 不支持即跳过，不抛）。
+   */
+  private fun applyOffscreenPreraster(s: WebSettings) {
+    try {
+      if (supports(WebViewFeature.OFF_SCREEN_PRERASTER)) {
+        WebSettingsCompat.setOffscreenPreRaster(s, true)
+      }
+    } catch (_: Throwable) {
     }
   }
 
