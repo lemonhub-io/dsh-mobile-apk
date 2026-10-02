@@ -331,8 +331,9 @@ class MainActivity : ComponentActivity() {
     // provider 热更新中——低端与老设备实测情形）。旧路径在 onCreate 直接炸：无诊断、无引导页，
     // 系统层面表现为「点开即崩」。改为如实落 boot-diag + 一句话告知 + finish 干净退出；
     // 早退后各 lateinit 面由 ::isInitialized 闸门挡住，onDestroy 不碰未建对象。
-    webView = try {
-      WebView(this)
+    // （赋值保持 `webView = WebView(this)` 字面形态——ForegroundPageRecoveryWiringTest 线序钉。）
+    try {
+      webView = WebView(this)
     } catch (t: Throwable) {
       LogCollector.writeBootDiag(
         this,
@@ -343,7 +344,8 @@ class MainActivity : ComponentActivity() {
       Toast.makeText(this, R.string.ds_webview_provider_missing, Toast.LENGTH_LONG).show()
       finish()
       return
-    }.apply {
+    }
+    webView.apply {
       id = View.generateViewId()
       visibility = View.GONE
       // §2.3（0.14.1 块C）：未设背景色时默认白，白屏在视觉上与「正常空页」不可区分——渲染失败
