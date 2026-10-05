@@ -606,8 +606,10 @@ class BootDiagnosticsContractTest {
   @Test
   fun webViewVersionIsReadBack() {
     val code = codeOnly(source("MainActivity.kt"))
-    assertTrue("§2.4：必须读内核包", code.contains("WebView.getCurrentWebViewPackage()"))
+    assertTrue("§2.4：必须经 shim 读内核版本", code.contains("WebViewShim.providerVersionName()"))
     assertTrue("§2.4：必须解析 major", code.contains("currentWebViewMajor()"))
+    // 原始调用收进 shim（单面真源）：MainActivity 不得再自带 getCurrentWebViewPackage 副本。
+    assertFalse("§2.4：provider 回读不得散在各调用点", code.contains("getCurrentWebViewPackage"))
   }
 
   /** §2.4：版本必须落 webview-version 诊断（落盘面）。 */

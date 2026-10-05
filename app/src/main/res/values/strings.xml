@@ -13,6 +13,8 @@
   <string name="ds_safe_prompt_copy_failed">修复指令复制到剪贴板失败（系统剪贴板不可用）——可打开控制台，按提示执行安全模式命令。</string>
   <string name="ds_safe_failed">进入安全模式未成功：%1$s</string>
   <string name="ds_safe_hint_short">也可点下方「安全模式启动」自救：只摘第三方插件、保留本应用插件，并把含报错原文的修复指令复制到剪贴板。</string>
+  <!-- provider 缺失/升级窗口期：WebView 构造即抛，连引导页都建不起来——只能 Toast 告知。 -->
+  <string name="ds_webview_provider_missing">本机缺少可用的 WebView 内核（未安装、被停用或正在升级），请安装或更新 Android System WebView 后重试。</string>
   <string name="ds_safe_hint">启动失败时可点「安全模式启动」：只摘除第三方插件、保留本应用插件，并把含报错原文的修复指令复制到剪贴板。也可打开控制台执行安全模式命令。</string>
   <string name="ds_restart">重新启动</string>
   <string name="ds_starting">启动中</string>

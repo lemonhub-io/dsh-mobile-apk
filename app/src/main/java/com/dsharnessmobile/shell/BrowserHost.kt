@@ -830,7 +830,16 @@ internal class BrowserHost(
       tab.loadState = "error"
       return null
     }
-    val created = WebView(activity)
+    // provider 会话中更新/被移除时，WebView() 构造本身会抛——走既有错误通道如实报，
+    // 不让浏览器面板的一次打开把壳侧整个崩掉（与 MainActivity 构造守护同一类故障）。
+    val created = try {
+      WebView(activity)
+    } catch (_: Throwable) {
+      workspace.profileError = "webview-provider-unavailable"
+      lastError = workspace.profileError
+      tab.loadState = "error"
+      return null
+    }
     // FIRST operation on this WebView: assign and verify its session's nonDefault profile.
     // No settings, JS evaluation, bridge, load or root attachment may precede this boundary.
     try {
@@ -847,29 +856,11 @@ internal class BrowserHost(
       id = View.generateViewId()
       visibility = View.GONE
       setBackgroundColor(Color.TRANSPARENT)
+      // 隔离 WebView 吃「baseline + isolation」两档：版本敏感设置的真源在 WebViewShim。
+      // （settings.apply{} 是既有线序钉：profile attach 必须先于任何 settings 配置。）
       settings.apply {
-        javaScriptEnabled = true
-        domStorageEnabled = true
-        allowFileAccess = false
-        allowContentAccess = false
-        @Suppress("DEPRECATION")
-        allowFileAccessFromFileURLs = false
-        @Suppress("DEPRECATION")
-        allowUniversalAccessFromFileURLs = false
-        javaScriptCanOpenWindowsAutomatically = false
-        setSupportMultipleWindows(false)
-        setGeolocationEnabled(false)
-        mediaPlaybackRequiresUserGesture = true
-        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-        cacheMode = WebSettings.LOAD_NO_CACHE
-        // 分辨率预设 = CSS 视口：document-start 注入 `width=<cssW>`（见 applyDocumentStartScript）。
-        loadWithOverviewMode = true
-        useWideViewPort = true
-        if (android.os.Build.VERSION.SDK_INT >= 26) safeBrowsingEnabled = true
-        if (android.os.Build.VERSION.SDK_INT >= 29) {
-          @Suppress("DEPRECATION")
-          forceDark = WebSettings.FORCE_DARK_AUTO
-        }
+        WebViewShim.applyBaseline(this)
+        WebViewShim.applyIsolation(this)
       }
       // 滚动观察（页面真实滚动位置，不注入任何脚本）：驱动可信面板的控件避让与横屏锁定。
       // 回调一律写**本 tab** 的状态（闭包捕获 tab），绝不写「当前活动页」——否则后台页的
@@ -1274,12 +1265,11 @@ a{display:inline-block;margin-top:16px;padding:10px 20px;border-radius:8px;backg
   // ── capability + navigation ops ───────────────────────────────────────────
 
   private fun caps(): JSONObject {
-    val pkg = if (android.os.Build.VERSION.SDK_INT >= 26) WebView.getCurrentWebViewPackage() else null
-    val versionText = pkg?.versionName ?: ""
-    val major = Regex("(\\d+)\\.").find(versionText)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+    val versionText = WebViewShim.providerVersionName()
+    val major = WebViewShim.providerMajor()
     val metrics = dshWebView.resources.displayMetrics
-    val documentStart = featureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
-    val uaCh = featureSupported(WebViewFeature.USER_AGENT_METADATA)
+    val documentStart = WebViewShim.supports(WebViewFeature.DOCUMENT_START_SCRIPT)
+    val uaCh = WebViewShim.supports(WebViewFeature.USER_AGENT_METADATA)
     val multiProfile = BrowserHostProfile.supported()
     val isolationAvailable = multiProfile && currentWorkspace?.profileError.isNullOrEmpty()
     return JSONObject()
@@ -1305,13 +1295,6 @@ a{display:inline-block;margin-top:16px;padding:10px 20px;border-radius:8px;backg
       .put("cdpEnabled", false)
       .put("viewportId", requestedViewport?.id ?: "device")
       .put("surface", "browser")
-  }
-
-  /** androidx.webkit 能力门：WebView 包不支持该特性时返回 false（不抛）。 */
-  private fun featureSupported(feature: String): Boolean = try {
-    WebViewFeature.isFeatureSupported(feature)
-  } catch (_: Throwable) {
-    false
   }
 
   /** Validate all private open options before creating/configuring a tab or loading any URL. */
@@ -1521,7 +1504,7 @@ a{display:inline-block;margin-top:16px;padding:10px 20px;border-radius:8px;backg
 
   private fun applyDocumentStartScript(browser: WebView) {
     activeTab()?.let { releaseTabScripts(it) }
-    if (!featureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+    if (!WebViewShim.supports(WebViewFeature.DOCUMENT_START_SCRIPT)) return
     val preset = requestedViewport
     if (preset != null) addDocStart(browser, viewportScript(preset.width))
     if (identityId != "android-real") identityScriptHandler = addDocStart(browser,
@@ -1608,12 +1591,13 @@ a{display:inline-block;margin-top:16px;padding:10px 20px;border-radius:8px;backg
 
   /** WebView >= 116 时同批设置 UA-CH（与 UA 串脱钩会让站点判定分裂）；本机不支持则如实返回 false。 */
   private fun applyUserAgentMetadata(browser: WebView, profile: String): Boolean {
-    if (profile == "android-real" || !featureSupported(WebViewFeature.USER_AGENT_METADATA)) return false
+    if (profile == "android-real" || !WebViewShim.supports(WebViewFeature.USER_AGENT_METADATA)) return false
     // Metadata follows the applied UA, not an unrelated provider package version.
     val versionText = Regex("Chrome/([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)")
       .find(browser.settings.userAgentString.orEmpty())?.groupValues?.get(1)
-      ?: WebView.getCurrentWebViewPackage()?.versionName.orEmpty()
-    val major = Regex("(\\d+)\\.").find(versionText)?.groupValues?.get(1) ?: ""
+      ?: WebViewShim.providerVersionName()
+    // 不可解析时回空串（与旧实现一致）：UA-CH 的 major 字段为空好过填 "0" 冒充。
+    val major = WebViewShim.majorOf(versionText).takeIf { it > 0 }?.toString() ?: ""
     return try {
       val metadata = UserAgentMetadata.Builder()
         .setBrandVersionList(listOf(UserAgentMetadata.BrandVersion.Builder()
